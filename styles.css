@@ -1,0 +1,30 @@
+html, body {
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	right: 0px;
+	bottom: 0px;
+	padding: 0px;
+	margin: 0px;
+	overflow: hidden;
+	display: flex;
+	height: 100%;
+	width: 100%;
+	background-color: #000;
+	cursor:none;
+}
+
+canvas {
+	margin: auto auto;
+}
+
+
+#hud {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    color: #aaccff;
+    font-family: monospace;
+    font-size: 14px;
+    pointer-events: none;
+  }

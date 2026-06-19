@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Play Hole</title>
+	<link rel="shortcut icon" href="icon.png" type="image/x-icon">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="hud">
+	<p id="mode-label">Mode: Neutron Star</p>
+	<p id="hint">Press 1 = Neutron Star, 2 = Wormhole. Shift+mouse moves portal B in wormhole mode.</p>
+</div>
+
+<script id="2d-fragment-shader" type="x-shader/x-fragment">
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+#define PI 3.14159265359
+#define LENS_STRENGTH 0.085
+
+uniform sampler2D u_image;
+varying vec2 v_texCoord;
+
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+uniform vec2 u_wormhole_pair;
+uniform float u_mass;
+uniform float u_time;
+uniform float u_clickedTime;
+uniform float u_spin;
+uniform int u_mode;
+
+float schwarzschildR(float mass) {
+	return 2.8 * mass;
+}
+
+float deflectionAngle(float b, float rs) {
+	return (4.0 * rs) / max(b, rs * 1.05);
+}
+
+vec2 schwarzschildLens(vec2 st, vec2 center, float rs) {
+	vec2 delta = st - center;
+	float b = length(delta);
+	if (b < 0.0001) return st;
+	vec2 n = delta / b;
+	float alpha = deflectionAngle(b, rs);
+	return st + n * alpha * LENS_STRENGTH;
+}
+
+float gravRedshift(float r, float rs) {
+	return sqrt(clamp(1.0 - rs / max(r, rs * 1.001), 0.0, 1.0));
+}
+
+float screenEdgeFade(vec2 uv) {
+	float margin = 0.07;
+	return smoothstep(0.0, margin, uv.x)
+	     * smoothstep(0.0, margin, 1.0 - uv.x)
+	     * smoothstep(0.0, margin, uv.y)
+	     * smoothstep(0.0, margin, 1.0 - uv.y);
+}
+
+vec2 safeSampleUV(vec2 st, vec2 warped) {
+	float edge = screenEdgeFade(st);
+	vec2 uv = mix(st, warped, edge);
+	return clamp(uv, 0.001, 0.999);
+}
+
+vec2 wormholeThroatMap(vec2 st, vec2 fromC, vec2 toC, float throatR) {
+	vec2 d = st - fromC;
+	float r = length(d);
+	if (r > throatR) return st;
+
+	float angle = atan(d.y, d.x);
+	float t = r / throatR;
+	float throat = sin(t * PI);
+	angle += throat * 1.5;
+
+	return toC + vec2(cos(angle), sin(angle)) * (throatR - r);
+}
+
+vec2 wormholeLensField(vec2 st, vec2 mouthA, vec2 mouthB, float throatR, float rs) {
+	vec2 uv = st;
+	uv = schwarzschildLens(uv, mouthA, rs * 0.55);
+	uv = schwarzschildLens(uv, mouthB, rs * 0.55);
+
+	float bA = distance(st, mouthA);
+	float bB = distance(st, mouthB);
+
+	if (bA < throatR) {
+		uv = wormholeThroatMap(st, mouthA, mouthB, throatR);
+		uv = schwarzschildLens(uv, mouthB, rs * 0.35);
+	} else if (bB < throatR) {
+		uv = wormholeThroatMap(st, mouthB, mouthA, throatR);
+		uv = schwarzschildLens(uv, mouthA, rs * 0.35);
+	}
+
+	return uv;
+}
+
+void main() {
+	vec2 st = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y) / u_resolution;
+	vec2 mt = vec2(u_mouse.x, u_resolution.y - u_mouse.y) / u_resolution;
+	vec2 wt = vec2(u_wormhole_pair.x, u_resolution.y - u_wormhole_pair.y) / u_resolution;
+
+	float rs = schwarzschildR(u_mass);
+	float rsNS = u_mass;
+	float throatR = 0.09;
+
+	vec2 sampleUV = st;
+	float dist = distance(st, mt);
+	float distA = distance(st, mt);
+	float distB = distance(st, wt);
+
+	if (u_mode == 0) {
+		sampleUV = safeSampleUV(st, schwarzschildLens(st, mt, rsNS));
+	} else {
+		sampleUV = safeSampleUV(st, wormholeLensField(st, mt, wt, throatR, rs));
+	}
+
+	vec4 imgcolor = texture2D(u_image, sampleUV);
+	vec3 color = imgcolor.rgb;
+
+	if (u_mode == 0) {
+		float rSurface = 2.6 * rsNS;
+
+		if (dist < rSurface) {
+			float limb = smoothstep(rsNS, rSurface, dist);
+			color = mix(vec3(0.95, 0.97, 1.0), vec3(0.7, 0.8, 1.0), limb);
+		} else {
+			color *= gravRedshift(dist, rsNS);
+		}
+
+		vec2 delta = st - mt;
+		float pulsarPhase = u_time * u_spin * 2.0 * PI;
+		vec2 magAxis = vec2(cos(pulsarPhase), sin(pulsarPhase));
+		float cosMag = abs(dot(normalize(delta + vec2(0.0001)), magAxis));
+		float beam = pow(cosMag, 20.0);
+		float pulse = 0.65 + 0.35 * sin(u_time * u_spin * 4.0 * PI);
+		color += vec3(0.55, 0.75, 1.0) * beam * pulse * smoothstep(rSurface * 5.0, rSurface, dist) * 0.45;
+	}
+
+	if (u_mode == 1) {
+		color *= gravRedshift(distA, rs * 0.55);
+		color *= gravRedshift(distB, rs * 0.55);
+
+		float ringA = exp(-pow(distA - throatR, 2.0) / 0.00006);
+		float ringB = exp(-pow(distB - throatR, 2.0) / 0.00006);
+		color += vec3(0.95, 0.88, 0.65) * (ringA + ringB) * 0.35;
+
+		float inThroat = max(
+			1.0 - smoothstep(throatR * 0.85, 0.0, distA),
+			1.0 - smoothstep(throatR * 0.85, 0.0, distB)
+		);
+		color = mix(color, color * 0.75, inThroat * 0.35);
+	}
+
+	gl_FragColor = vec4(color, 1.0);
+}
+</script>
+
+<script id="2d-vertex-shader" type="x-shader/x-vertex">
+attribute vec2 a_position;
+attribute vec2 a_texCoord;
+
+varying vec2 v_texCoord;
+
+void main() {
+	gl_Position = vec4(a_position, 0.0, 1.0);
+	v_texCoord = a_texCoord;
+}
+</script>
+
+<canvas id="glscreen"></canvas>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script src="main_new.js"></script>
+
+</body>
+</html>
