@@ -1,7 +1,22 @@
 
 // set up global javascript variables
 
-var bgUrl = 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=1427&q=80'
+var webbBackgrounds = [
+	{ id: 'weic2513a', title: "Cat's Paw Nebula" },
+	{ id: 'carinanebula3', title: 'Carina Nebula Jets' },
+	{ id: 'weic2216b', title: 'Pillars of Creation (Full View)' },
+	{ id: 'weic2601a', title: 'Helix Nebula' },
+	{ id: 'weic2425a', title: 'NGC 602' },
+];
+
+function webbImageUrl(id) {
+	return 'https://cdn.esawebb.org/archives/images/large/' + id + '.jpg';
+}
+
+var selectedBackgroundId = webbBackgrounds[0].id;
+var bgSelect;
+var bgStatus;
+var texture;
 
 var uMass = 0.015;
 
@@ -189,7 +204,7 @@ function init(image) {
 	gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
 	// Create a texture.
-	var texture = gl.createTexture();
+	texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 
 	// Set the parameters so we can render any size image.
@@ -202,6 +217,73 @@ function init(image) {
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
 
 	render();
+}
+
+function setBackgroundStatus(message) {
+	if (bgStatus) {
+		bgStatus.textContent = message || '';
+	}
+}
+
+function setBackgroundLoading(loading) {
+	if (bgSelect) {
+		bgSelect.disabled = loading;
+	}
+}
+
+function loadBackground(id, onReady) {
+	var background = webbBackgrounds.find(function(item) {
+		return item.id === id;
+	}) || webbBackgrounds[0];
+
+	selectedBackgroundId = background.id;
+	var imageUrl = webbImageUrl(background.id);
+
+	setBackgroundLoading(true);
+	setBackgroundStatus('Loading ' + background.title + '...');
+
+	var image = new Image();
+	image.crossOrigin = 'Anonymous';
+	image.src = imageUrl;
+	image.onload = function() {
+		if (gl && texture) {
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+		}
+
+		setBackgroundLoading(false);
+		setBackgroundStatus('');
+
+		if (onReady) {
+			onReady(image);
+		}
+	};
+	image.onerror = function() {
+		setBackgroundLoading(false);
+		setBackgroundStatus('Could not load background. Check your connection.');
+		console.error('Failed to load background image:', imageUrl);
+	};
+}
+
+function initBackgroundSelector() {
+	bgSelect = document.getElementById('bg-select');
+	bgStatus = document.getElementById('bg-status');
+
+	if (!bgSelect) {
+		return;
+	}
+
+	webbBackgrounds.forEach(function(background) {
+		var option = document.createElement('option');
+		option.value = background.id;
+		option.textContent = background.title;
+		bgSelect.appendChild(option);
+	});
+
+	bgSelect.value = selectedBackgroundId;
+	bgSelect.addEventListener('change', function() {
+		loadBackground(bgSelect.value);
+	});
 }
 
 function render() {
@@ -242,18 +324,9 @@ function render() {
 	gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 
-window.addEventListener('load', function(event){
-	var image = new Image();
-  	image.crossOrigin = "Anonymous";
-	image.src = bgUrl;
-	image.onload = function() {
-		init(image);
-	};
-	image.onerror = function() {
-		console.error('Failed to load background image:', bgUrl);
-		alert('Could not load space image. Check your internet connection.');
-	};
-
+window.addEventListener('load', function() {
+	initBackgroundSelector();
+	loadBackground(selectedBackgroundId, init);
 });
 
 window.addEventListener('keydown', function(event) {

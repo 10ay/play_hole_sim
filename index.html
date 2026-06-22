@@ -10,7 +10,10 @@
 <body>
 <div id="hud">
 	<p id="mode-label">Mode: Neutron Star</p>
-	<p id="hint">Press 1 = Neutron Star, 2 = Wormhole. Shift+mouse moves portal B in wormhole mode.</p>
+	<label id="bg-label" class="hud-interactive" for="bg-select">Background:</label>
+	<select id="bg-select" class="hud-interactive" aria-labelledby="bg-label"></select>
+	<p id="bg-status" class="hud-interactive" aria-live="polite"></p>
+	<p id="hint">Press 1 = Neutron Star, 2 = Wormhole. Shift+mouse moves portal B in wormhole mode. Backgrounds from <a class="hud-link" href="https://esawebb.org/images/" target="_blank" rel="noopener">ESA/Webb</a>.</p>
 </div>
 
 <script id="2d-fragment-shader" type="x-shader/x-fragment">
